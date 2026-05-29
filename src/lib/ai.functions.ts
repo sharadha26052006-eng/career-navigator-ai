@@ -6,7 +6,7 @@ const GATEWAY = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "llama-3.3-70b-versatile";
 
 async function callGateway(body: unknown) {
-  const key = process.env.GROQ_API_KEY;
+ const key = process.env.GROQ_API_KEY || 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;
   if (!key) throw new Error("VITE_GROQ_API_KEY not configured");
   const res = await fetch(GATEWAY, {
     method: "POST",
