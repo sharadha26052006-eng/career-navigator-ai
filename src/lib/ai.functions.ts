@@ -2,12 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-3-flash-preview";
+const GATEWAY = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL = "llama-3.3-70b-versatile";
 
 async function callGateway(body: unknown) {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error("LOVABLE_API_KEY not configured");
+  const key = process.env.GROQ_API_KEY;
+  if (!key) throw new Error("VITE_GROQ_API_KEY not configured");
   const res = await fetch(GATEWAY, {
     method: "POST",
     headers: {
@@ -17,11 +17,10 @@ async function callGateway(body: unknown) {
     body: JSON.stringify(body),
   });
   if (res.status === 429) throw new Error("Rate limit reached. Please try again in a moment.");
-  if (res.status === 402) throw new Error("AI credits exhausted. Add credits in Settings → Workspace → Usage.");
   if (!res.ok) {
     const t = await res.text();
-    console.error("AI gateway error", res.status, t);
-    throw new Error("AI service unavailable");
+    console.error("Groq error", res.status, t);
+    throw new Error(`AI error ${res.status}: ${t}`);
   }
   return res.json();
 }
@@ -39,71 +38,44 @@ export const analyzeResume = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
-    const tools = [
-      {
-        type: "function",
-        function: {
-          name: "report_resume_analysis",
-          description: "Return structured resume analysis.",
-          parameters: {
-            type: "object",
-            properties: {
-              summary: { type: "string", description: "2-3 sentence professional summary" },
-              strengths: { type: "array", items: { type: "string" } },
-              gaps: { type: "array", items: { type: "string" } },
-              skills: { type: "array", items: { type: "string" } },
-              experience_level: { type: "string", enum: ["entry", "mid", "senior", "lead"] },
-              career_paths: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    fit_score: { type: "number", minimum: 0, maximum: 100 },
-                    why: { type: "string" },
-                    next_steps: { type: "array", items: { type: "string" } },
-                  },
-                  required: ["title", "fit_score", "why", "next_steps"],
-                },
-              },
-              projects: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
-                    description: { type: "string" },
-                    tech: { type: "array", items: { type: "string" } },
-                  },
-                  required: ["title", "difficulty", "description", "tech"],
-                },
-              },
-            },
-            required: ["summary", "strengths", "gaps", "skills", "experience_level", "career_paths", "projects"],
-            additionalProperties: false,
-          },
-        },
-      },
-    ];
-
     const result = await callGateway({
       model: MODEL,
       messages: [
         {
           role: "system",
-          content:
-            "You are NeuroHire, a multi-agent career assistant. Analyze the resume rigorously. Return 3-5 career paths with realistic fit scores, and 3-5 portfolio project ideas tailored to the candidate's gaps.",
+          content: `You are NeuroHire, a multi-agent career assistant. Analyze the resume and return a JSON object with these fields:
+{
+  "summary": "2-3 sentence professional summary",
+  "strengths": ["strength1", "strength2"],
+  "gaps": ["gap1", "gap2"],
+  "skills": ["skill1", "skill2"],
+  "experience_level": "entry|mid|senior|lead",
+  "career_paths": [
+    {
+      "title": "Role Title",
+      "fit_score": 85,
+      "why": "reason",
+      "next_steps": ["step1", "step2"]
+    }
+  ],
+  "projects": [
+    {
+      "title": "Project Title",
+      "difficulty": "beginner|intermediate|advanced",
+      "description": "description",
+      "tech": ["tech1", "tech2"]
+    }
+  ]
+}
+Return ONLY the JSON object, no markdown, no explanation.`,
         },
         { role: "user", content: `Resume:\n\n${data.rawText}` },
       ],
-      tools,
-      tool_choice: { type: "function", function: { name: "report_resume_analysis" } },
     });
 
-    const toolCall = result.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("AI returned no analysis");
-    const analysis = JSON.parse(toolCall.function.arguments);
+    const raw = result.choices?.[0]?.message?.content ?? "";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const analysis = JSON.parse(clean);
 
     const { error } = await supabase
       .from("resumes")
@@ -195,42 +167,30 @@ export const interviewFeedback = createServerFn({ method: "POST" })
       .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
       .join("\n\n");
 
-    const tools = [
-      {
-        type: "function",
-        function: {
-          name: "report_feedback",
-          parameters: {
-            type: "object",
-            properties: {
-              overall_score: { type: "number", minimum: 0, maximum: 100 },
-              communication: { type: "number", minimum: 0, maximum: 100 },
-              technical: { type: "number", minimum: 0, maximum: 100 },
-              problem_solving: { type: "number", minimum: 0, maximum: 100 },
-              strengths: { type: "array", items: { type: "string" } },
-              improvements: { type: "array", items: { type: "string" } },
-              summary: { type: "string" },
-            },
-            required: ["overall_score", "communication", "technical", "problem_solving", "strengths", "improvements", "summary"],
-            additionalProperties: false,
-          },
-        },
-      },
-    ];
-
     const result = await callGateway({
       model: MODEL,
       messages: [
-        { role: "system", content: `You are evaluating a mock interview for: ${session.role}. Provide rigorous, fair feedback.` },
+        {
+          role: "system",
+          content: `You are evaluating a mock interview for: ${session.role}. Return a JSON object:
+{
+  "overall_score": 80,
+  "communication": 75,
+  "technical": 85,
+  "problem_solving": 80,
+  "strengths": ["strength1"],
+  "improvements": ["improvement1"],
+  "summary": "overall summary"
+}
+Return ONLY the JSON object, no markdown, no explanation.`,
+        },
         { role: "user", content: `Transcript:\n\n${transcript}` },
       ],
-      tools,
-      tool_choice: { type: "function", function: { name: "report_feedback" } },
     });
 
-    const toolCall = result.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("AI returned no feedback");
-    const feedback = JSON.parse(toolCall.function.arguments);
+    const raw = result.choices?.[0]?.message?.content ?? "";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const feedback = JSON.parse(clean);
 
     await supabase
       .from("interview_sessions")
