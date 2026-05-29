@@ -4,4 +4,11 @@
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  "vars": {
+    "SUPABASE_URL": "https://wnxogvrgxqrqbqhezccl.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndueG9ndnJneHFycWJxaGV6Y2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTEwMDksImV4cCI6MjA5NTI4NzAwOX0.PUuz3VdoAe3wHzXz6UGSoLvPILJ2NVKXu9LPPJbReJE",
+    "VITE_SUPABASE_URL": "https://wnxogvrgxqrqbqhezccl.supabase.co",
+    "VITE_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndueG9ndnJneHFycWJxaGV6Y2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTEwMDksImV4cCI6MjA5NTI4NzAwOX0.PUuz3VdoAe3wHzXz6UGSoLvPILJ2NVKXu9LPPJbReJE",
+    "VITE_SUPABASE_PROJECT_ID": "wnxogvrgxqrqbqhezccl"
+  }
 }
